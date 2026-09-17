@@ -4,7 +4,7 @@ DeskTidy（桌面归置）是一款运行在 Windows 桌面上的**桌面文件�
 
 软件启动后主界面默认隐藏，仅驻留系统托盘；全部配置保存在 **exe 同目录的 `DeskTidy.ini`** 文件中，重启后自动恢复。
 
-<img width="1467" height="1359" alt="ScreenShot_2026-09-16_224136_991" src="https://github.com/user-attachments/assets/1d0df5d8-17c6-4fb9-b652-9385ccfd288a" />
+![软件效果](.\ScreenShot_2026-09-17_222920_058.png)
 
 
 ### 1.1 核心目标
