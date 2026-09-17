@@ -1,0 +1,49 @@
+.workbuddy/
+_ui_backup/
+_backup*/
+*.py
+.trae/
+
+# ===== Visual Studio 生成缓存 =====
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# ===== 构建输出目录（根目录与项目目录下的 x64 / Debug / Release）=====
+x64/
+Debug/
+Release/
+ipch/
+*.aps
+
+# ===== 编译器 / 链接器中间产物 =====
+*.obj
+*.o
+*.pch
+*.pdb
+*.ilk
+*.idb
+*.ipdb
+*.iobj
+*.exp
+*.res
+*.tlog/
+*.lastbuildstate
+
+# ===== IntelliSense 数据库 =====
+*.VC.db
+*.VC.VC.opendb
+*.sdf
+*.opensdf
+*.ncb
+
+# ===== 运行期生成文件 =====
+*.log
+
+# ===== 系统文件 =====
+Thumbs.db
+Desktop.ini
+
+

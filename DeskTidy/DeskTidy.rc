@@ -1,0 +1,278 @@
+// Microsoft Visual C++ generated resource script.
+//
+#include "resource.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 2 resource.
+//
+#ifndef APSTUDIO_INVOKED
+#include "targetver.h"
+#endif
+#include "afxres.h"
+#include "verrsrc.h"
+
+/////////////////////////////////////////////////////////////////////////////
+#undef APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+// 中文(简体，中国) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_CHS)
+LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
+#pragma code_page(936)
+
+#ifdef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// TEXTINCLUDE
+//
+
+1 TEXTINCLUDE 
+BEGIN
+    "resource.h\0"
+END
+
+2 TEXTINCLUDE 
+BEGIN
+    "#ifndef APSTUDIO_INVOKED\r\n"
+    "#include ""targetver.h""\r\n"
+    "#endif\r\n"
+    "#include ""afxres.h""\r\n"
+    "#include ""verrsrc.h""\r\n"
+    "\0"
+END
+
+3 TEXTINCLUDE 
+BEGIN
+    "#define _AFX_NO_SPLITTER_RESOURCES\r\n"
+    "#define _AFX_NO_OLE_RESOURCES\r\n"
+    "#define _AFX_NO_TRACKER_RESOURCES\r\n"
+    "#define _AFX_NO_PROPERTY_RESOURCES\r\n"
+    "\r\n"
+    "#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_CHS)\r\n"
+    "LANGUAGE 4, 2\r\n"
+    "#include ""res\\DeskTidy.rc2""  // 闈?Microsoft Visual C++ 缂栬緫鐨勮祫婧?\n"
+    "#include ""l.CHS\\afxres.rc""      // 鏍囧噯缁勪欢\r\n"
+    "#if !defined(_AFXDLL)\r\n"
+    "#include ""l.CHS\\afxribbon.rc""   // MFC 鍔熻兘鍖哄拰鎺у埗鏉¤祫婧?\n"
+    "#endif\r\n"
+    "#endif\r\n"
+    "\0"
+END
+
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Icon
+//
+
+// Icon with lowest ID value placed first to ensure application icon
+// remains consistent on all systems.
+IDR_MAINFRAME           ICON                    "res\\DeskTidy.ico"
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+IDD_ABOUTBOX DIALOGEX 0, 0, 170, 62
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "关于 DeskTidy"
+FONT 9, "MS Shell Dlg", 0, 0, 0x1
+BEGIN
+    ICON            IDR_MAINFRAME,IDC_STATIC,14,14,21,20
+    LTEXT           "DeskTidy，版本 1.0",IDC_STATIC,42,14,114,8,SS_NOPREFIX
+    LTEXT           "版权所有 (C) 2026",IDC_STATIC,42,26,114,8
+    DEFPUSHBUTTON   "确定",IDOK,113,41,50,14,WS_GROUP
+END
+
+IDD_DESKTIDY_DIALOG DIALOGEX 0, 0, 408, 483
+STYLE DS_SETFONT | WS_POPUP | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU
+EXSTYLE WS_EX_APPWINDOW
+CAPTION "桌面归置设置"
+FONT 9, "Segoe UI", 0, 0, 0x1
+BEGIN
+    LTEXT           "小窗口列表（每个小窗口独立显示一个目录）",IDC_STATIC,10,10,380,10
+    LISTBOX         IDC_LIST_WIDGETS,10,24,300,90,LBS_OWNERDRAWFIXED | LBS_HASSTRINGS | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_TABSTOP
+    CONTROL         "添加目录(&A)...",IDC_BTN_ADD,"Button",BS_OWNERDRAW | WS_TABSTOP,324,24,74,14
+    CONTROL         "删除选中(&D)",IDC_BTN_DEL,"Button",BS_OWNERDRAW | WS_TABSTOP,324,42,74,14
+    CONTROL         "最底层（所有窗口之下）",IDC_RADIO_BOTTOM,"Button",BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP,20,142,180,12
+    CONTROL         "悬浮置顶",IDC_RADIO_TOPMOST,"Button",BS_AUTORADIOBUTTON | WS_TABSTOP,20,160,180,12
+    CONTROL         "列表视图",IDC_RADIO_LIST,"Button",BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP,220,142,70,12
+    CONTROL         "网格视图",IDC_RADIO_GRID,"Button",BS_AUTORADIOBUTTON | WS_TABSTOP,220,160,70,12
+    LTEXT           "标题栏颜色:",IDC_STATIC,20,177,50,10
+    CONTROL         "标题栏颜色",IDC_BTN_HEADER_COLOR,"Button",BS_OWNERDRAW | WS_TABSTOP,74,176,88,16
+    LTEXT           "背景色:",IDC_STATIC,176,177,34,10
+    CONTROL         "背景色",IDC_BTN_BG_COLOR,"Button",BS_OWNERDRAW | WS_TABSTOP,212,176,88,16
+    LTEXT           "文字颜色:",IDC_STATIC,20,197,50,10
+    CONTROL         "名称颜色",IDC_BTN_TEXT_COLOR,"Button",BS_OWNERDRAW | WS_TABSTOP,74,196,88,16
+    CONTROL         "自动跟随背景",IDC_CHECK_TEXT_AUTO,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,176,198,90,12
+    CONTROL         "恢复默认(&R)",IDC_BTN_COLOR_RESET,"Button",BS_OWNERDRAW | WS_TABSTOP,312,196,70,16
+    LTEXT           "标题栏透明度:",IDC_STATIC,20,219,58,10
+    CONTROL         "",IDC_SLIDER_HEADER_ALPHA,"msctls_trackbar32",TBS_NOTICKS | WS_TABSTOP,82,216,120,16
+    LTEXT           "100%",IDC_STATIC_HEADER_ALPHA_VAL,208,219,30,10
+    LTEXT           "背景透明度:",IDC_STATIC,20,239,58,10
+    CONTROL         "",IDC_SLIDER_BG_ALPHA,"msctls_trackbar32",TBS_NOTICKS | WS_TABSTOP,82,236,120,16
+    LTEXT           "100%",IDC_STATIC_BG_ALPHA_VAL,208,239,30,10
+    LTEXT           "点击三个色块分别设置标题栏颜色、背景色与文件名称颜色；名称色可勾选【自动跟随背景】。",IDC_STATIC,20,257,368,10
+    LTEXT           "拖动两个滑块设置独立透明度；拖动/缩放窗口会自动保存位置与大小，点【应用】后生效。",IDC_STATIC,20,270,368,10
+    CONTROL         "启用层级维护(&Z)：修复遮挡/消失",IDC_CHECK_ZORDER_MAINTAIN,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,20,284,270,12
+    CONTROL         "置底采用桌面子窗口（免定时z序维护）",IDC_CHECK_BOTTOM_CHILD,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,20,298,270,12
+    CONTROL         "应用(&S)",IDC_BTN_APPLY,"Button",BS_OWNERDRAW | WS_TABSTOP,310,296,74,14
+    CONTROL         "开机自启动(&U)：随 Windows 登录后自动运行",IDC_CHECK_AUTOSTART,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,20,322,270,12
+    LTEXT           "悬浮置顶:",IDC_STATIC,20,371,80,12
+    CONTROL         "",IDC_EDIT_TOP_HOTKEY,"msctls_hotkey32",WS_TABSTOP,104,369,110,14
+    CONTROL         "启用",IDC_CHECK_TOP_HOTKEY,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,228,371,50,12
+    LTEXT           "置底:",IDC_STATIC,20,391,80,12
+    CONTROL         "",IDC_EDIT_BOTTOM_HOTKEY,"msctls_hotkey32",WS_TABSTOP,104,389,110,14
+    CONTROL         "启用",IDC_CHECK_BOTTOM_HOTKEY,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,228,391,50,12
+    LTEXT           "缩放放大:",IDC_STATIC,20,411,80,12
+    CONTROL         "",IDC_EDIT_ZOOMIN_HOTKEY,"msctls_hotkey32",WS_TABSTOP,104,409,110,14
+    CONTROL         "启用",IDC_CHECK_ZOOMIN_HOTKEY,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,228,411,50,12
+    LTEXT           "缩放缩小:",IDC_STATIC,20,431,80,12
+    CONTROL         "",IDC_EDIT_ZOOMOUT_HOTKEY,"msctls_hotkey32",WS_TABSTOP,104,429,110,14
+    CONTROL         "启用",IDC_CHECK_ZOOMOUT_HOTKEY,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,228,431,50,12
+    LTEXT           "勾选【启用】后，点击输入框并按下组合键（需包含 Ctrl、Alt 或 Shift）即可指定全局快捷键，留空为不指定。",IDC_STATIC,20,446,368,12
+    LTEXT           "快捷键对所有小窗口生效；与系统或其他程序冲突的组合将注册失败并给出提示。",IDC_STATIC,20,461,352,12
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Menu
+//
+
+IDR_TRAY_MENU MENU
+BEGIN
+    POPUP "托盘菜单"
+    BEGIN
+        MENUITEM "参数设置",                        ID_TRAY_SHOW
+        MENUITEM SEPARATOR
+        MENUITEM "显示小窗口",                       ID_TRAY_SHOW_WIDGETS
+        MENUITEM "隐藏小窗口",                       ID_TRAY_HIDE_WIDGETS
+        MENUITEM SEPARATOR
+        MENUITEM "退出",                          ID_TRAY_EXIT
+    END
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Version
+//
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 1,0,0,1
+ PRODUCTVERSION 1,0,0,1
+ FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+ FILEFLAGS 0x1L
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS 0x40004L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "080404B0"
+        BEGIN
+            VALUE "CompanyName", "TODO: <公司名>"
+            VALUE "FileDescription", "DeskTidy"
+            VALUE "FileVersion", "1.0.0.1"
+            VALUE "InternalName", "DeskTidy.exe"
+            VALUE "LegalCopyright", "TODO:  (C) <公司名>。  保留所有权利。"
+            VALUE "OriginalFilename", "DeskTidy.exe"
+            VALUE "ProductName", "TODO: <产品名>"
+            VALUE "ProductVersion", "1.0.0.1"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x804, 1200
+    END
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO
+BEGIN
+    IDD_ABOUTBOX, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 163
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 55
+    END
+
+    IDD_DESKTIDY_DIALOG, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 407
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 475
+    END
+END
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// AFX_DIALOG_LAYOUT
+//
+
+IDD_DESKTIDY_DIALOG AFX_DIALOG_LAYOUT
+BEGIN
+    0
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// String Table
+//
+
+STRINGTABLE
+BEGIN
+    IDS_ABOUTBOX            "关于 DeskTidy(&A)..."
+    IDP_SOCKETS_INIT_FAILED "Windows 套接字初始化失败。"
+END
+
+#endif    // 中文(简体，中国) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+
+#ifndef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 3 resource.
+//
+#define _AFX_NO_SPLITTER_RESOURCES
+#define _AFX_NO_OLE_RESOURCES
+#define _AFX_NO_TRACKER_RESOURCES
+#define _AFX_NO_PROPERTY_RESOURCES
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_CHS)
+LANGUAGE 4, 2
+#include "res\DeskTidy.rc2"  // 闈?Microsoft Visual C++ 缂栬緫鐨勮祫婧?
+#include "l.CHS\afxres.rc"      // 鏍囧噯缁勪欢
+#if !defined(_AFXDLL)
+#include "l.CHS\afxribbon.rc"   // MFC 鍔熻兘鍖哄拰鎺у埗鏉¤祫婧?
+#endif
+#endif
+
+/////////////////////////////////////////////////////////////////////////////
+#endif    // not APSTUDIO_INVOKED
+
