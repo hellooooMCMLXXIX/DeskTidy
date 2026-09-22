@@ -12,6 +12,16 @@
 
 #include <shlobj.h>     // SHGetFolderPath：获取系统目录（桌面等）
 #include <afxdlgs.h>    // CFolderPickerDialog：目录选择对话框
+#include <dwmapi.h>     // WorkBuddy: DwmSetWindowAttribute——Win11 圆角窗口
+#pragma comment(lib, "dwmapi.lib")
+
+// Win11 22H2 新增的 DWM 属性/常量，旧 SDK 头文件里没有，兜底自定义
+#ifndef DWMWA_WINDOW_CORNER_PREFERENCE
+#define DWMWA_WINDOW_CORNER_PREFERENCE 33
+#endif
+#ifndef DWMWCP_ROUND
+#define DWMWCP_ROUND 2
+#endif
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -293,6 +303,14 @@ BOOL CDeskTidyDlg::OnInitDialog()
 	//  执行此操作
 	SetIcon(m_hIcon, TRUE);			// 设置大图标
 	SetIcon(m_hIcon, FALSE);		// 设置小图标
+
+	// WorkBuddy: Win11 圆角窗口——DWM 合成层直接对整窗圆角（含阴影/贴边适配）。
+	// 低版本系统上调用失败即保持原直角外观，无任何副作用
+	{
+		int nPref = DWMWCP_ROUND;
+		::DwmSetWindowAttribute(GetSafeHwnd(), DWMWA_WINDOW_CORNER_PREFERENCE,
+		                        &nPref, sizeof(nPref));
+	}
 
 	// ---- 业务初始化 ----
 

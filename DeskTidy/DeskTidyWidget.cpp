@@ -3002,18 +3002,46 @@ void CDeskTidyWidget::RenderLayered()
     BYTE* pSrc = (BYTE*)pTemp;
     BYTE* pDst = (BYTE*)pFinal;
     int nStride = W * 4;
+
+    // WorkBuddy: 圆角遮罩——只对四角半径方块内的像素计算"到角部圆弧的覆盖度"，
+    // 其余像素覆盖度恒为 255，零额外开销。覆盖度 < 1 的边缘像素按比例衰减
+    // alpha，得到抗锯齿圆弧；圆弧外 alpha=0 完全透明。
+    // 注意最终 alpha = 区域alpha * 覆盖度，RGB 按最终 alpha 预乘（ULW 要求）
+    const double dR   = (double)WIDGET_CORNER_RADIUS;
+    const double dRIn = dR - 0.5;    // 完全在圆弧内：覆盖度 1
+    const double dROut = dR + 0.5;   // 完全在圆弧外：覆盖度 0
     for (int y = 0; y < H; y++)
     {
         BYTE a = (y < WIDGET_HEADER_HEIGHT) ? m_byHeaderAlpha : m_byBgAlpha;
+        // 该行是否落在上/下角方块行带内；是则记录本行角部圆心的 y 坐标
+        BOOL bCornerRow = (y < WIDGET_CORNER_RADIUS) || (y >= H - WIDGET_CORNER_RADIUS);
+        double dcy = 0.0;
+        if (bCornerRow)
+            dcy = (y < WIDGET_CORNER_RADIUS) ? dR : (double)(H - WIDGET_CORNER_RADIUS);
         BYTE* pRowS = pSrc + y * nStride;
         BYTE* pRowD = pDst + y * nStride;
         for (int x = 0; x < W; x++)
         {
             int i = x * 4;
-            pRowD[i]     = (BYTE)((pRowS[i]     * a) / 255);   // B
-            pRowD[i + 1] = (BYTE)((pRowS[i + 1] * a) / 255);   // G
-            pRowD[i + 2] = (BYTE)((pRowS[i + 2] * a) / 255);   // R
-            pRowD[i + 3] = a;                                  // A
+            BYTE cov = 255;   // 圆角覆盖度（255 = 完整）
+            if (bCornerRow && (x < WIDGET_CORNER_RADIUS || x >= W - WIDGET_CORNER_RADIUS))
+            {
+                double dcx = (x < WIDGET_CORNER_RADIUS) ? dR : (double)(W - WIDGET_CORNER_RADIUS);
+                double dx = x + 0.5 - dcx;
+                double dy = y + 0.5 - dcy;
+                double dist = sqrt(dx * dx + dy * dy);
+                if (dist >= dROut)
+                    cov = 0;
+                else if (dist > dRIn)
+                    cov = (BYTE)((dROut - dist) * 255.0);
+            }
+
+            // 最终 alpha = 区域 alpha × 圆角覆盖度；RGB 按最终 alpha 预乘
+            BYTE aa = (BYTE)(((int)a * cov) / 255);
+            pRowD[i]     = (BYTE)((pRowS[i]     * aa) / 255);   // B
+            pRowD[i + 1] = (BYTE)((pRowS[i + 1] * aa) / 255);   // G
+            pRowD[i + 2] = (BYTE)((pRowS[i + 2] * aa) / 255);   // R
+            pRowD[i + 3] = aa;                                  // A
         }
     }
 

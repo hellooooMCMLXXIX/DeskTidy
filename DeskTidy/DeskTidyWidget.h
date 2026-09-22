@@ -65,6 +65,10 @@
 
 // 小窗口顶部标题条高度（像素）
 #define WIDGET_HEADER_HEIGHT   24
+// WorkBuddy: 小窗口四角圆角半径（像素）。RenderLayered 的逐像素 alpha 循环
+// 按该半径把四角抠成抗锯齿圆弧——分层窗口内容全部来自 ULW 位图，
+// 圆角必须做在位图 alpha 上（DWM 圆角属性对 ULW 窗口不可靠）
+#define WIDGET_CORNER_RADIUS   10
 // WorkBuddy: 展开矩形无效（高度不大于标题条+边缘，即被污染成折叠条尺寸）时
 // 用于兜底的默认展开高度——保证"展开"动作永远能把窗口拉回可视大小
 #define WIDGET_DEFAULT_EXPAND_HEIGHT  400
