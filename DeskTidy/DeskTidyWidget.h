@@ -134,6 +134,11 @@ enum WIDGET_BTN_ID
 // 消息，由消息循环派发时（此时翻转早已完成）补一次渲染，双保险
 #define WM_WIDGET_CHILD_RENDER      (WM_APP + 12)
 
+// WorkBuddy: 请求打开全局搜索弹窗（小窗口右键菜单 -> 主对话框）。
+// 搜索范围 = 全部小窗口的目录，入口统一在主对话框（CSearchPopup 在其侧），
+// 小窗口只负责 PostMessage 转达用户意图，wParam/lParam 未用
+#define WM_WIDGET_SEARCH            (WM_APP + 13)
+
 // 单实例运行消息（由 DeskTidy.cpp 的启动检查跨进程 PostMessage 投递）：
 // 用户重复启动（双击桌面图标 / 开始菜单 / 任务栏）时，后启动的进程不会
 // 再起第二份实例，而是找到已在运行实例的主窗口并投递本消息，

@@ -55,9 +55,521 @@
 static const RECT g_rcCardDLU[2] =
 {
 	{ 10, 116, 398, 316 },   // 卡片 1：选中窗口的属性（层级 / 视图 / 三个配色 / 透明度 / 应用）
-	{ 10, 340, 398, 478 },   // 卡片 2：全局快捷键（随卡片 1 增高 22 DLU 一并下移）
+	{ 10, 340, 398, 498 },   // 卡片 2：全局快捷键（随卡片 1 增高 22 DLU 一并下移）
 };
 #define UI_CARD_COUNT   (sizeof(g_rcCardDLU) / sizeof(g_rcCardDLU[0]))
+
+// ---------------------------------------------------------------------------
+// WorkBuddy: 全局搜索弹窗（无资源模板，控件运行时创建；类声明见 DeskTidyDlg.h）
+// ---------------------------------------------------------------------------
+
+// 弹窗内部控件 ID（仅本弹窗内部使用，避开 Resource.h 的 1000~1030 段）
+#define IDC_SEARCH_EDIT     2100    // 关键词输入框
+#define IDC_SEARCH_GO       2101    // "搜索"按钮
+#define IDC_SEARCH_LIST     2102    // 结果列表
+
+// 搜索条布局几何（DoLayout / SetSize / DrawSearchBar 三处共用，保证一致）
+#define SEARCH_ROW_H      60    // 胶囊搜索条高度
+#define SEARCH_BAR_MARGIN 12    // 搜索条与窗口边缘的距离（上下左右）
+#define SEARCH_BTN_W      52    // 放大镜按钮宽度
+#define SEARCH_EDIT_H     34    // 输入框高度（在胶囊条内垂直居中，见 DoLayout）
+#define SEARCH_ITEM_H     56    // 结果列表项高度（图标 32px + 上下留白）
+#define SEARCH_EXPANDED_H 420   // 展开态客户区高度（容纳约 5~6 个结果项）
+
+// 弹窗配色（与设置主界面同源的浅色扁平风格）
+#define SEARCH_CLR_ACCENT   RGB(0x2D, 0x6E, 0xB4)   // 强调色（品牌蓝，放大镜/按下描边）
+#define SEARCH_CLR_BORDER   RGB(0xE5, 0xE7, 0xEB)   // 控件细描边
+#define SEARCH_CLR_HOVER    RGB(0xEA, 0xF1, 0xFA)   // 悬停浅蓝底
+#define SEARCH_CLR_TEXT2    RGB(0x9A, 0xA2, 0xAC)   // 底部统计行灰字
+
+BEGIN_MESSAGE_MAP(CSearchPopup, CWnd)
+	ON_BN_CLICKED(IDC_SEARCH_GO, &CSearchPopup::OnBtnSearch)
+	ON_LBN_DBLCLK(IDC_SEARCH_LIST, &CSearchPopup::OnListDblClk)
+	ON_EN_SETFOCUS(IDC_SEARCH_EDIT, &CSearchPopup::OnEditSetFocus)
+	ON_EN_KILLFOCUS(IDC_SEARCH_EDIT, &CSearchPopup::OnEditKillFocus)
+	ON_WM_PAINT()
+	ON_WM_ERASEBKGND()
+	ON_WM_DRAWITEM()
+	ON_WM_NCHITTEST()
+	ON_MESSAGE(WM_FLATBTN_HOVER, &CSearchPopup::OnBtnHover)
+END_MESSAGE_MAP()
+
+BOOL CSearchPopup::Create(CWnd* pOwner)
+{
+	// 顶层无边框弹窗：没有标题栏（窗口空白区经 OnNcHitTest 当标题栏拖动），
+	// 仅 1px 细边框 + Win11 DWM 圆角；pOwner 作为 owner 窗口（设置主界面），
+	// 主界面销毁时弹窗随之销毁
+	DWORD dwStyle = WS_POPUP | WS_BORDER | WS_CLIPCHILDREN;
+	CString strClass = AfxRegisterWndClass(CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS,
+	                                       ::LoadCursor(NULL, IDC_ARROW),
+	                                       (HBRUSH)(COLOR_WINDOW + 1));
+	if (!CreateEx(WS_EX_TOPMOST, strClass, _T("搜索文件"),
+	              dwStyle, CRect(0, 0, 0, 0), pOwner, 0))
+		return FALSE;
+
+	// Win11 圆角，与设置主界面观感一致（低版本系统调用失败无副作用）
+	int nPref = DWMWCP_ROUND;
+	::DwmSetWindowAttribute(m_hWnd, DWMWA_WINDOW_CORNER_PREFERENCE,
+	                        &nPref, sizeof(nPref));
+
+	// 三个字体均按 DPI 换算像素高度：搜索框 16pt / 文件名 11pt / 路径 9pt
+	HDC hScreen   = ::GetDC(NULL);
+	const int nDpiY  = GetDeviceCaps(hScreen, LOGPIXELSY);
+	int nFontH       = -MulDiv(16, nDpiY, 72);
+	int nNameFontH   = -MulDiv(11, nDpiY, 72);
+	int nPathFontH   = -MulDiv(9,  nDpiY, 72);
+	::ReleaseDC(NULL, hScreen);
+	m_fontBig.CreateFont(nFontH, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET,
+	                     OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+	                     DEFAULT_PITCH | FF_DONTCARE, _T("Segoe UI"));
+	m_fontName.CreateFont(nNameFontH, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET,
+	                      OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+	                      DEFAULT_PITCH | FF_DONTCARE, _T("Segoe UI"));
+	m_fontPath.CreateFont(nPathFontH, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET,
+	                      OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+	                      DEFAULT_PITCH | FF_DONTCARE, _T("Segoe UI"));
+
+	// 输入框不带系统边框（WS_BORDER 的 3D 凹槽观感廉价）——
+	// 边框由 DrawSearchBar 画的胶囊容器提供；占位提示用 EM_SETCUEBANNER
+	m_edit.Create(WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
+	              CRect(0, 0, 0, 0), this, IDC_SEARCH_EDIT);
+	m_edit.SetFont(&m_fontBig);
+	m_edit.SendMessage(EM_SETCUEBANNER, (WPARAM)FALSE,
+	                   (LPARAM)_T("输入关键词或正则表达式…"));
+	// 自绘放大镜按钮（无文字）；CFlatBtn 提供悬停转发供绘制悬停态
+	m_btn.Create(_T(""), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
+	             CRect(0, 0, 0, 0), this, IDC_SEARCH_GO);
+	// 结果列表：自绘双行项（图标 + 文件名/路径），固定行高
+	m_list.Create(WS_CHILD | WS_TABSTOP | WS_VSCROLL | WS_HSCROLL |
+	              LBS_NOINTEGRALHEIGHT | LBS_NOTIFY |
+	              LBS_OWNERDRAWFIXED | LBS_HASSTRINGS,
+	              CRect(0, 0, 0, 0), this, IDC_SEARCH_LIST);
+	m_list.SendMessage(LB_SETITEMHEIGHT, 0, (LPARAM)SEARCH_ITEM_H);
+
+	// 初始为紧凑尺寸：刚好包住输入框和搜索按钮
+	SetSize(FALSE);
+	return TRUE;
+}
+
+// 紧凑/展开切换：紧凑 = 客户区刚好包住输入行；展开 = 露出结果列表与统计行。
+// 锚定左上角向下伸展，不跳动
+void CSearchPopup::SetSize(BOOL bExpanded)
+{
+	m_bExpanded = bExpanded;
+	CRect rcNeed(0, 0, 480, bExpanded ? SEARCH_EXPANDED_H
+	                                  : SEARCH_BAR_MARGIN * 2 + SEARCH_ROW_H);
+	AdjustWindowRect(&rcNeed, GetStyle(), FALSE);
+	CRect rcNow;
+	GetWindowRect(&rcNow);
+	SetWindowPos(NULL, rcNow.left, rcNow.top, rcNeed.Width(), rcNeed.Height(),
+	             SWP_NOZORDER | SWP_NOACTIVATE);
+	DoLayout();
+}
+
+// 按当前状态布置子控件：胶囊搜索条固定在顶部（输入框/按钮内嵌其中，
+// 上下各留 6px 让条描边可见），结果列表仅展开态可见
+void CSearchPopup::DoLayout()
+{
+	if (m_edit.GetSafeHwnd() == NULL)
+		return;
+	CRect rc;
+	GetClientRect(&rc);
+	const int w = rc.Width();
+	const int barL = SEARCH_BAR_MARGIN;
+	const int barT = SEARCH_BAR_MARGIN;
+	const int barR = w - SEARCH_BAR_MARGIN;
+	const int barB = SEARCH_BAR_MARGIN + SEARCH_ROW_H;
+	const int btnL = barR - 6 - SEARCH_BTN_W;
+	m_edit.MoveWindow(barL + 16, barT + (SEARCH_ROW_H - SEARCH_EDIT_H) / 2,
+	                  btnL - 8 - (barL + 16), SEARCH_EDIT_H);
+	m_btn.MoveWindow(btnL, barT + 4, SEARCH_BTN_W, SEARCH_ROW_H - 8);
+	if (m_bExpanded)
+	{
+		m_list.MoveWindow(10, barB + 10, w - 20, rc.Height() - (barB + 10) - 30);
+		m_list.ShowWindow(SW_SHOW);
+	}
+	else
+	{
+		m_list.ShowWindow(SW_HIDE);
+	}
+}
+
+// 自绘胶囊搜索条容器：白色填充 + 圆角描边。聚焦态品牌蓝 2px（一眼看清
+// 在哪里打字），非焦点浅灰 1px。输入框/按钮是子控件，画在描边内侧
+void CSearchPopup::DrawSearchBar(CDC* pDC)
+{
+	CRect rc;
+	GetClientRect(&rc);
+	CRect rcBar(SEARCH_BAR_MARGIN, SEARCH_BAR_MARGIN,
+	            rc.Width() - SEARCH_BAR_MARGIN,
+	            SEARCH_BAR_MARGIN + SEARCH_ROW_H);
+	CBrush br(RGB(0xFF, 0xFF, 0xFF));
+	CPen   pen(PS_SOLID, m_bEditFocus ? 2 : 1,
+	           m_bEditFocus ? SEARCH_CLR_ACCENT : SEARCH_CLR_BORDER);
+	HGDIOBJ po = pDC->SelectObject(&br);
+	HGDIOBJ pp = pDC->SelectObject(&pen);
+	pDC->RoundRect(rcBar, CPoint(rcBar.Height(), rcBar.Height()));   // 全圆角胶囊
+	pDC->SelectObject(po);
+	pDC->SelectObject(pp);
+}
+
+BOOL CSearchPopup::OnEraseBkgnd(CDC* pDC)
+{
+	CRect rc;
+	GetClientRect(&rc);
+	pDC->FillSolidRect(rc, RGB(0xFF, 0xFF, 0xFF));
+	DrawSearchBar(pDC);
+	return TRUE;
+}
+
+// 白底 + 胶囊搜索条 + 底部统计行（"共 N 项 · 双击打开"）；
+// 输入框/按钮/列表均为子控件，各自绘制
+void CSearchPopup::OnPaint()
+{
+	CPaintDC dc(this);
+	DrawSearchBar(&dc);
+	if (!m_bExpanded || m_nFound < 0)
+		return;
+
+	CRect rc;
+	GetClientRect(&rc);
+	CFont* pFont = (GetOwner() != NULL) ? GetOwner()->GetFont() : NULL;
+	if (pFont != NULL)
+		dc.SelectObject(pFont);
+	dc.SetBkMode(TRANSPARENT);
+	dc.SetTextColor(SEARCH_CLR_TEXT2);
+
+	CString strTip;
+	if (m_nFound == 0)
+		strTip = _T("未找到匹配的文件");
+	else
+		strTip.Format(_T("共 %d 项 · 双击打开%s"), m_nFound,
+		              m_bTruncated ? _T("（已达上限）") : _T(""));
+	dc.DrawText(strTip, CRect(12, rc.bottom - 26, rc.right - 12, rc.bottom - 6),
+	            DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+}
+
+// 自绘"搜索"按钮：无文字，画一个放大镜图标；含悬停/按下态
+void CSearchPopup::DrawSearchButton(LPDRAWITEMSTRUCT lpDIS)
+{
+	CDC dc;
+	dc.Attach(lpDIS->hDC);
+	CRect rc(lpDIS->rcItem);
+
+	const BOOL bPressed = (lpDIS->itemState & ODS_SELECTED) != 0;
+	const BOOL bHover   = m_bBtnHover || bPressed;
+
+	// 底：圆角矩形。默认白底灰描边；悬停浅蓝底；按下描边加深为强调色
+	const COLORREF clrBg   = bHover ? SEARCH_CLR_HOVER : RGB(0xFF, 0xFF, 0xFF);
+	const COLORREF clrLine = bPressed ? SEARCH_CLR_ACCENT
+	                          : (bHover ? RGB(0xBD, 0xD4, 0xF0) : SEARCH_CLR_BORDER);
+	CBrush br(clrBg);
+	CPen   pen(PS_SOLID, 1, clrLine);
+	HGDIOBJ po = dc.SelectObject(&br);
+	HGDIOBJ pp = dc.SelectObject(&pen);
+	dc.RoundRect(rc, CPoint(8, 8));
+	dc.SelectObject(po);
+	dc.SelectObject(pp);
+
+	// 放大镜：圆环 + 45° 手柄（强调色，按下加深）
+	const COLORREF clrIcon = bPressed ? RGB(0x1F, 0x4F, 0x84) : SEARCH_CLR_ACCENT;
+	CPen penIco(PS_SOLID, 2, clrIcon);
+	dc.SelectObject(&penIco);
+	dc.SelectObject(::GetStockObject(NULL_BRUSH));
+	const int d = rc.Height() * 4 / 10;   // 透镜直径
+	const int cx = rc.CenterPoint().x - 2;
+	const int cy = rc.CenterPoint().y - 2;
+	CRect rcLens(cx - d / 2, cy - d / 2, cx + d / 2, cy + d / 2);
+	dc.Ellipse(rcLens);
+	dc.MoveTo(rcLens.right - 1, rcLens.bottom - 1);
+	dc.LineTo(rc.right - 10, rc.bottom - 10);
+
+	dc.Detach();
+}
+
+void CSearchPopup::OnDrawItem(int nIDCtl, LPDRAWITEMSTRUCT lpDrawItemStruct)
+{
+	if (lpDrawItemStruct == NULL)
+		return;
+	if (nIDCtl == IDC_SEARCH_GO)
+		DrawSearchButton(lpDrawItemStruct);
+	else if (nIDCtl == IDC_SEARCH_LIST)
+		DrawSearchResult(lpDrawItemStruct);
+}
+
+// 释放结果文件图标缓存
+CSearchPopup::~CSearchPopup()
+{
+	void* pv = NULL;
+	POSITION pos = m_mapIcons.GetStartPosition();
+	while (pos != NULL)
+	{
+		CString strKey;
+		m_mapIcons.GetNextAssoc(pos, strKey, pv);
+		if (pv != NULL)
+			::DestroyIcon((HICON)pv);
+	}
+}
+
+// 取文件关联图标（按完整路径缓存；.lnk 由 shell 解析出目标图标）。
+// 取不到也缓存 NULL，避免每个搜索周期对同一文件反复失败
+HICON CSearchPopup::GetItemIcon(LPCTSTR pszPath)
+{
+	void* pv = NULL;
+	if (m_mapIcons.Lookup(pszPath, pv))
+		return (HICON)pv;
+
+	SHFILEINFO fi = {};
+	HICON hIcon = NULL;
+	if (::SHGetFileInfo(pszPath, 0, &fi, sizeof(fi),
+	                    SHGFI_ICON | SHGFI_LARGEICON) && fi.hIcon != NULL)
+		hIcon = fi.hIcon;   // 所有权归缓存，析构统一 DestroyIcon
+	m_mapIcons.SetAt(pszPath, (void*)hIcon);
+	return hIcon;
+}
+
+// 结果项绘制：左侧 32px 文件图标；右侧两行——第一行文件名（11pt 深灰）、
+// 第二行完整路径（9pt 浅灰，DT_PATH_ELLIPSIS 中部省略）；选中项浅蓝底
+void CSearchPopup::DrawSearchResult(LPDRAWITEMSTRUCT lpDIS)
+{
+	CDC dc;
+	dc.Attach(lpDIS->hDC);
+	CRect rc(lpDIS->rcItem);
+	const BOOL bSel = (lpDIS->itemState & ODS_SELECTED) != 0;
+
+	dc.FillSolidRect(rc, bSel ? SEARCH_CLR_HOVER : RGB(0xFF, 0xFF, 0xFF));
+
+	CString strPath;
+	m_list.GetText(lpDIS->itemID, strPath);
+	if (strPath.IsEmpty())
+	{
+		dc.Detach();
+		return;
+	}
+
+	// 左侧图标（垂直居中）
+	HICON hIcon = GetItemIcon(strPath);
+	if (hIcon != NULL)
+		::DrawIconEx(dc.GetSafeHdc(), 12, rc.top + (rc.Height() - 32) / 2,
+		             hIcon, 32, 32, 0, NULL, DI_NORMAL);
+
+	// 文件名 = 路径最后一段
+	int nSlash = strPath.ReverseFind(_T('\\'));
+	CString strName = (nSlash >= 0) ? strPath.Mid(nSlash + 1) : strPath;
+
+	dc.SetBkMode(TRANSPARENT);
+	// 第一行：文件名（大）
+	CFont* pOld = dc.SelectObject(&m_fontName);
+	dc.SetTextColor(RGB(0x1F, 0x29, 0x37));
+	dc.DrawText(strName, CRect(56, rc.top + 7, rc.right - 8, rc.top + 29),
+	            DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
+	// 第二行：路径（小、灰、中部省略保住扩展名与文件名）
+	dc.SelectObject(&m_fontPath);
+	dc.SetTextColor(SEARCH_CLR_TEXT2);
+	dc.DrawText(strPath, CRect(56, rc.top + 30, rc.right - 8, rc.top + 48),
+	            DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS | DT_PATH_ELLIPSIS);
+	dc.SelectObject(pOld);
+	dc.Detach();
+}
+
+// 聚焦/失焦：切换搜索条描边颜色（品牌蓝 <-> 浅灰），重绘容器
+void CSearchPopup::OnEditSetFocus()
+{
+	m_bEditFocus = TRUE;
+	Invalidate(FALSE);
+}
+
+void CSearchPopup::OnEditKillFocus()
+{
+	m_bEditFocus = FALSE;
+	Invalidate(FALSE);
+}
+
+// CFlatBtn 悬停转发（WM_FLATBTN_HOVER）：更新悬停态并重绘放大镜按钮
+LRESULT CSearchPopup::OnBtnHover(WPARAM wParam, LPARAM lParam)
+{
+	if ((int)wParam == IDC_SEARCH_GO)
+	{
+		m_bBtnHover = (BOOL)lParam;
+		m_btn.Invalidate();
+	}
+	return 0;
+}
+
+// 无标题栏：整个窗口空白区域都当标题栏用，按住即可拖动
+//（输入框/按钮/列表是子窗口，各自正常响应鼠标，不受影响）
+LRESULT CSearchPopup::OnNcHitTest(CPoint point)
+{
+	LRESULT ht = CWnd::OnNcHitTest(point);
+	return (ht == HTCLIENT) ? (LRESULT)HTCAPTION : ht;
+}
+
+// 显示并置顶；每次唤出都把窗口摆到屏幕上方（水平居中于主屏工作区、
+// 距屏幕顶部 300px），然后聚焦输入框并全选上次关键词，输入即覆盖
+void CSearchPopup::PrepareAndShow()
+{
+	CRect rcNow;
+	GetWindowRect(&rcNow);
+	CRect rcWork;
+	SystemParametersInfo(SPI_GETWORKAREA, 0, &rcWork, 0);   // 主屏工作区（不含任务栏）
+	const int x = rcWork.left + (rcWork.Width() - rcNow.Width()) / 2;
+	const int y = rcWork.top + 150;   // 用户指定：距屏幕顶部 150px
+	SetWindowPos(&CWnd::wndTopMost, x, y, 0, 0,
+	             SWP_NOSIZE | SWP_SHOWWINDOW);
+	m_edit.SetFocus();
+	m_edit.SetSel(0, -1);
+}
+
+void CSearchPopup::OnBtnSearch()
+{
+	RunSearch();
+}
+
+// 双击结果：用系统默认程序打开该文件/目录
+void CSearchPopup::OnListDblClk()
+{
+	int nSel = m_list.GetCurSel();
+	if (nSel >= 0)
+	{
+		CString strPath;
+		m_list.GetText(nSel, strPath);
+		if (!strPath.IsEmpty())
+			ShellExecute(NULL, _T("open"), strPath, NULL, NULL, SW_SHOWNORMAL);
+	}
+}
+
+// Enter = 执行搜索；Esc = 关闭弹窗（仅当焦点在本弹窗内时拦截，
+// 不影响其他窗口处理这两个键）
+BOOL CSearchPopup::PreTranslateMessage(MSG* pMsg)
+{
+	if (pMsg->message == WM_KEYDOWN &&
+	    (pMsg->wParam == VK_RETURN || pMsg->wParam == VK_ESCAPE))
+	{
+		CWnd* pFocus = GetFocus();
+		if (pFocus != NULL && (pFocus->GetSafeHwnd() == m_hWnd || IsChild(pFocus)))
+		{
+			if (pMsg->wParam == VK_RETURN)
+				RunSearch();
+			else
+				ShowWindow(SW_HIDE);
+			return TRUE;
+		}
+	}
+	return CWnd::PreTranslateMessage(pMsg);
+}
+
+// 执行搜索：遍历所有小窗口目录（递归子目录），按文件名匹配。
+// 匹配规则：输入能编译为有效正则时按正则匹配（不区分大小写，如
+// "report.*\.pdf"、"第.+章"）；编译失败（普通词组无元字符也能编译，
+// 效果等同子串匹配）才回退普通子串。有结果才展开列表区；无关键词/
+// 无结果时窗口收缩为刚好包住输入框和搜索按钮的紧凑形态
+//（统计信息由 OnPaint 画在底部）
+void CSearchPopup::RunSearch()
+{
+	CString strQuery;
+	m_edit.GetWindowText(strQuery);
+	strQuery.Trim();
+	m_list.ResetContent();
+
+	m_nFound     = 0;
+	m_bTruncated = FALSE;
+
+	if (!strQuery.IsEmpty())
+	{
+		// 正则优先：ECMAScript 语法 + 不区分大小写；非法模式回退子串
+		std::wregex re;
+		BOOL bRegex = FALSE;
+		try
+		{
+			re.assign((LPCTSTR)strQuery, std::regex_constants::icase);
+			bRegex = TRUE;
+		}
+		catch (const std::regex_error&)
+		{
+			bRegex = FALSE;
+		}
+
+		CString strPlainLower = strQuery;
+		strPlainLower.MakeLower();
+
+		for (int i = 0; i < (int)m_arrDirs.GetCount(); i++)
+		{
+			if (!SearchOneDir(m_arrDirs[i], bRegex ? &re : NULL,
+			                  strPlainLower, m_nFound))
+			{
+				m_bTruncated = TRUE;
+				break;
+			}
+		}
+	}
+
+	// 两态切换：有结果才展开；无搜索内容时刚好包住输入框和搜索按钮
+	SetSize(m_nFound > 0);
+	Invalidate(FALSE);
+}
+
+// 递归搜索一个目录（含子目录）。返回 TRUE = 本分支搜索完整完成；
+// FALSE = 达到结果上限提前终止（调用方据此停止后续目录）
+BOOL CSearchPopup::SearchOneDir(const CString& strDir, const std::wregex* pRe,
+                                const CString& strPlainLower, int& nFound)
+{
+	if (nFound >= SEARCH_MAX_RESULTS)
+		return FALSE;
+
+	CFileFind finder;
+	BOOL bWorking = finder.FindFile(strDir + _T("\\*"));
+	while (bWorking)
+	{
+		bWorking = finder.FindNextFile();
+		if (finder.IsDots())
+			continue;
+
+		if (finder.IsDirectory())
+		{
+			if (!SearchOneDir(finder.GetFilePath(), pRe, strPlainLower, nFound))
+			{
+				finder.Close();
+				return FALSE;
+			}
+		}
+		else
+		{
+			if (MatchName(finder.GetFileName(), pRe, strPlainLower))
+			{
+				m_list.AddString(finder.GetFilePath());
+				if (++nFound >= SEARCH_MAX_RESULTS)
+				{
+					finder.Close();
+					return FALSE;
+				}
+			}
+		}
+	}
+	return TRUE;
+}
+
+// 文件名匹配：pRe 非空 = 正则模式（std::regex_search 语义，即"包含匹配"，
+// 不区分大小写，构造时已带 icase）；否则普通子串（不区分大小写）。
+// 正则求值包 try 保护——即使运行期出现异常也按不匹配处理，绝不让搜索崩溃
+BOOL CSearchPopup::MatchName(const CString& strName, const std::wregex* pRe,
+                             const CString& strPlainLower)
+{
+	if (pRe != NULL)
+	{
+		try
+		{
+			return std::regex_search((LPCTSTR)strName, *pRe) ? TRUE : FALSE;
+		}
+		catch (...)
+		{
+			return FALSE;
+		}
+	}
+
+	CString strLower = strName;
+	strLower.MakeLower();
+	return strLower.Find(strPlainLower) >= 0 ? TRUE : FALSE;
+}
 
 
 // 用于应用程序“关于”菜单项的 CAboutDlg 对话框
@@ -160,10 +672,12 @@ CDeskTidyDlg::CDeskTidyDlg(CWnd* pParent /*=nullptr*/)
 	, m_bBottomHotKeyEnable(FALSE)
 	, m_bZoomInHotKeyEnable(FALSE)
 	, m_bZoomOutHotKeyEnable(FALSE)
+	, m_bSearchHotKeyEnable(FALSE)
 	, m_nTopHotKey(0)
 	, m_nBottomHotKey(0)
 	, m_nZoomInHotKey(0)
 	, m_nZoomOutHotKey(0)
+	, m_nSearchHotKey(0)
 	, m_hHookForeground(NULL)   // WinEvent 钩子：初始未注册
 , m_hHookShow(NULL)
 , m_hHookReorder(NULL)
@@ -224,10 +738,12 @@ void CDeskTidyDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_EDIT_BOTTOM_HOTKEY, m_ctlBottomHotKey);
 	DDX_Control(pDX, IDC_EDIT_ZOOMIN_HOTKEY, m_ctlZoomInHotKey);
 	DDX_Control(pDX, IDC_EDIT_ZOOMOUT_HOTKEY, m_ctlZoomOutHotKey);
+	DDX_Control(pDX, IDC_EDIT_SEARCH_HOTKEY, m_ctlSearchHotKey);
 	DDX_Check(pDX, IDC_CHECK_TOP_HOTKEY, m_bTopHotKeyEnable);
 	DDX_Check(pDX, IDC_CHECK_BOTTOM_HOTKEY, m_bBottomHotKeyEnable);
 	DDX_Check(pDX, IDC_CHECK_ZOOMIN_HOTKEY, m_bZoomInHotKeyEnable);
 	DDX_Check(pDX, IDC_CHECK_ZOOMOUT_HOTKEY, m_bZoomOutHotKeyEnable);
+	DDX_Check(pDX, IDC_CHECK_SEARCH_HOTKEY, m_bSearchHotKeyEnable);
 	// WorkBuddy: 选中窗口的透明度滑块（拖滑块走 OnHScroll，此处只做控件绑定；
 	// 滑块范围在 OnInitDialog 中设置，待应用值由 m_nHeaderAlphaSel/m_nBgAlphaSel 保存）
 	DDX_Control(pDX, IDC_SLIDER_HEADER_ALPHA, m_sliderHeaderAlpha);
@@ -245,6 +761,7 @@ BEGIN_MESSAGE_MAP(CDeskTidyDlg, CDialogEx)
 	ON_WM_DESTROY()
 	ON_MESSAGE(WM_TRAYICON, &CDeskTidyDlg::OnTrayIcon)
 	ON_MESSAGE(WM_WIDGET_CHANGED, &CDeskTidyDlg::OnWidgetChanged)
+	ON_MESSAGE(WM_WIDGET_SEARCH, &CDeskTidyDlg::OnWidgetSearch)
 	// WorkBuddy: 单实例——第二个进程重复启动时投递此消息，请本实例显示主界面
 	// （消息 ID 定义见 DeskTidyWidget.h 的自定义消息区）
 	ON_MESSAGE(WM_DESKTIDY_ACTIVATE, &CDeskTidyDlg::OnActivateExisting)
@@ -252,6 +769,7 @@ BEGIN_MESSAGE_MAP(CDeskTidyDlg, CDialogEx)
 	ON_COMMAND(ID_TRAY_SHOW_WIDGETS, &CDeskTidyDlg::OnTrayShowWidgets)
 	ON_COMMAND(ID_TRAY_HIDE_WIDGETS, &CDeskTidyDlg::OnTrayHideWidgets)
 	ON_COMMAND(ID_TRAY_EXIT, &CDeskTidyDlg::OnTrayExit)
+	ON_COMMAND(ID_TRAY_SEARCH, &CDeskTidyDlg::OnTraySearch)
 	ON_BN_CLICKED(IDC_BTN_ADD, &CDeskTidyDlg::OnBnClickedAdd)
 	ON_BN_CLICKED(IDC_BTN_DEL, &CDeskTidyDlg::OnBnClickedDelete)
 	ON_BN_CLICKED(IDC_BTN_APPLY, &CDeskTidyDlg::OnBnClickedApply)
@@ -336,11 +854,13 @@ BOOL CDeskTidyDlg::OnInitDialog()
 	m_bBottomHotKeyEnable = (m_nBottomHotKey != 0);
 	m_bZoomInHotKeyEnable  = (m_nZoomInHotKey  != 0);
 	m_bZoomOutHotKeyEnable = (m_nZoomOutHotKey != 0);
+	m_bSearchHotKeyEnable = (m_nSearchHotKey != 0);
 	UpdateData(FALSE);
 	SetHotKeyToCtrl(m_ctlTopHotKey, m_nTopHotKey);
 	SetHotKeyToCtrl(m_ctlBottomHotKey, m_nBottomHotKey);
 	SetHotKeyToCtrl(m_ctlZoomInHotKey, m_nZoomInHotKey);
 	SetHotKeyToCtrl(m_ctlZoomOutHotKey, m_nZoomOutHotKey);
+	SetHotKeyToCtrl(m_ctlSearchHotKey, m_nSearchHotKey);
 
 	// 5. 添加系统托盘图标
 	AddTrayIcon();
@@ -583,6 +1103,21 @@ LRESULT CDeskTidyDlg::OnWidgetChanged(WPARAM wParam, LPARAM lParam)
 	return 0;
 }
 
+// WorkBuddy: 托盘菜单"搜索文件"：打开全局搜索弹窗
+// （与"搜索"快捷键同一个弹窗实例，搜索范围 = 全部小窗口目录）
+void CDeskTidyDlg::OnTraySearch()
+{
+	ShowSearchPopup();
+}
+
+// WorkBuddy: 小窗口右键菜单"搜索文件..."经 WM_WIDGET_SEARCH 转达，
+// 复用同一个搜索弹窗（弹窗与目录集合都归主对话框管理）
+LRESULT CDeskTidyDlg::OnWidgetSearch(WPARAM wParam, LPARAM lParam)
+{
+	ShowSearchPopup();
+	return 0;
+}
+
 // WorkBuddy: 单实例——第二个（重复启动的）进程会向本窗口投递此消息，
 // 请本实例把主界面显示到前台并激活。
 // 效果：用户无论从桌面图标、开始菜单还是任务栏重复启动 DeskTidy，
@@ -669,7 +1204,25 @@ LRESULT CDeskTidyDlg::OnHotKey(WPARAM wParam, LPARAM /*lParam*/)
 		ApplyAllWidgetZoom(1);      // 缩放放大快捷键：全部小窗口放大一档
 	else if (wParam == HOTKEY_ID_ZOOMOUT)
 		ApplyAllWidgetZoom(-1);     // 缩放缩小快捷键：全部小窗口缩小一档
+	else if (wParam == HOTKEY_ID_SEARCH)
+		ShowSearchPopup();          // WorkBuddy: 搜索快捷键：弹出全局搜索窗口
 	return 0;
+}
+
+// WorkBuddy: 显示/激活全局搜索弹窗。每次触发都重新同步搜索范围
+// （设置界面里的小窗口目录可能已增删），首次触发时创建弹窗
+void CDeskTidyDlg::ShowSearchPopup()
+{
+	m_searchPopup.m_arrDirs.RemoveAll();
+	for (int i = 0; i < (int)m_arrWidgets.GetCount(); i++)
+	{
+		CDeskTidyWidget* pWnd = m_arrWidgets[i];
+		if (pWnd->GetSafeHwnd() != NULL && !pWnd->GetDirectory().IsEmpty())
+			m_searchPopup.m_arrDirs.Add(pWnd->GetDirectory());
+	}
+	if (m_searchPopup.GetSafeHwnd() == NULL)
+		m_searchPopup.Create(this);
+	m_searchPopup.PrepareAndShow();
 }
 
 // 把所有小窗口统一设置为指定层级（0 = 最底层，1 = 悬浮置顶），
@@ -732,6 +1285,13 @@ void CDeskTidyDlg::RegisterHotKeys()
 		if (!::RegisterHotKey(m_hWnd, HOTKEY_ID_ZOOMOUT, uMods, uVk))
 			AfxMessageBox(_T("“缩放缩小”快捷键注册失败：该组合已被系统或其他程序占用。"));
 	}
+	if (m_nSearchHotKey != 0)
+	{
+		UINT uMods, uVk;
+		SplitHotKey(m_nSearchHotKey, uMods, uVk);
+		if (!::RegisterHotKey(m_hWnd, HOTKEY_ID_SEARCH, uMods, uVk))
+			AfxMessageBox(_T("“搜索”快捷键注册失败：该组合已被系统或其他程序占用。"));
+	}
 }
 
 // 反注册四个全局快捷键（未注册时调用无副作用）
@@ -741,6 +1301,7 @@ void CDeskTidyDlg::UnregisterHotKeys()
 	::UnregisterHotKey(m_hWnd, HOTKEY_ID_BOTTOM);
 	::UnregisterHotKey(m_hWnd, HOTKEY_ID_ZOOMIN);
 	::UnregisterHotKey(m_hWnd, HOTKEY_ID_ZOOMOUT);
+	::UnregisterHotKey(m_hWnd, HOTKEY_ID_SEARCH);
 }
 
 // 从界面控件读取并校验四个快捷键（置顶/置底/缩放放大/缩放缩小），
@@ -754,15 +1315,17 @@ BOOL CDeskTidyDlg::ApplyHotKeys()
 	int nBottom  = m_bBottomHotKeyEnable ? GetHotKeyFromCtrl(m_ctlBottomHotKey) : 0;
 	int nZoomIn  = m_bZoomInHotKeyEnable ? GetHotKeyFromCtrl(m_ctlZoomInHotKey) : 0;
 	int nZoomOut = m_bZoomOutHotKeyEnable ? GetHotKeyFromCtrl(m_ctlZoomOutHotKey) : 0;
+	int nSearch  = m_bSearchHotKeyEnable  ? GetHotKeyFromCtrl(m_ctlSearchHotKey)  : 0;
 
 	// 四个快捷键的名称（用于提示信息）
-	LPCTSTR aNames[] = { _T("置顶"), _T("置底"), _T("缩放放大"), _T("缩放缩小") };
+	LPCTSTR aNames[] = { _T("置顶"), _T("置底"), _T("缩放放大"), _T("缩放缩小"), _T("搜索") };
 
 	// 校验 1：勾选了"启用"但输入框中没有按键
-	int aVals[] = { nTop, nBottom, nZoomIn, nZoomOut };
+	int aVals[] = { nTop, nBottom, nZoomIn, nZoomOut, nSearch };
 	BOOL aEnables[] = { m_bTopHotKeyEnable, m_bBottomHotKeyEnable,
-						m_bZoomInHotKeyEnable, m_bZoomOutHotKeyEnable };
-	for (int i = 0; i < 4; i++)
+						m_bZoomInHotKeyEnable, m_bZoomOutHotKeyEnable,
+						m_bSearchHotKeyEnable };
+	for (int i = 0; i < 5; i++)
 	{
 		if (aEnables[i] && aVals[i] == 0)
 		{
@@ -774,7 +1337,7 @@ BOOL CDeskTidyDlg::ApplyHotKeys()
 	}
 
 	// 校验 2：至少包含一个修饰键（Ctrl/Alt/Shift），防止误触普通按键
-	for (int i = 0; i < 4; i++)
+	for (int i = 0; i < 5; i++)
 	{
 		if (aVals[i] != 0 && (aVals[i] & 0xFFFF0000) == 0)
 		{
@@ -786,9 +1349,9 @@ BOOL CDeskTidyDlg::ApplyHotKeys()
 	}
 
 	// 校验 3：四个快捷键两两不能完全相同（互相冲突）
-	for (int i = 0; i < 4; i++)
+	for (int i = 0; i < 5; i++)
 	{
-		for (int j = i + 1; j < 4; j++)
+		for (int j = i + 1; j < 5; j++)
 		{
 			if (aVals[i] != 0 && aVals[i] == aVals[j])
 			{
@@ -805,10 +1368,10 @@ BOOL CDeskTidyDlg::ApplyHotKeys()
 
 	// 四个快捷键的注册 ID
 	int aIds[] = { HOTKEY_ID_TOPMOST, HOTKEY_ID_BOTTOM,
-				   HOTKEY_ID_ZOOMIN, HOTKEY_ID_ZOOMOUT };
+				   HOTKEY_ID_ZOOMIN, HOTKEY_ID_ZOOMOUT, HOTKEY_ID_SEARCH };
 
 	// 逐个注册；任一失败则回滚本次已成功注册的全部快捷键，并提示冲突
-	for (int i = 0; i < 4; i++)
+	for (int i = 0; i < 5; i++)
 	{
 		if (aVals[i] == 0)
 			continue;   // 未指定：不注册
@@ -835,6 +1398,7 @@ BOOL CDeskTidyDlg::ApplyHotKeys()
 	m_nBottomHotKey = nBottom;
 	m_nZoomInHotKey  = nZoomIn;
 	m_nZoomOutHotKey = nZoomOut;
+	m_nSearchHotKey  = nSearch;
 	return TRUE;
 }
 
@@ -1779,6 +2343,7 @@ void CDeskTidyDlg::LoadConfig()
 	m_nBottomHotKey = GetPrivateProfileInt(_T("Settings"), _T("BottomHotKey"), 0, m_strIniPath);
 	m_nZoomInHotKey  = GetPrivateProfileInt(_T("Settings"), _T("ZoomInHotKey"), 0, m_strIniPath);
 	m_nZoomOutHotKey = GetPrivateProfileInt(_T("Settings"), _T("ZoomOutHotKey"), 0, m_strIniPath);
+	m_nSearchHotKey = GetPrivateProfileInt(_T("Settings"), _T("SearchHotKey"), 0, m_strIniPath);
 
 	// 读取小窗口数量
 	int nCount = GetPrivateProfileInt(_T("Widgets"), _T("Count"), 0, m_strIniPath);
@@ -1969,6 +2534,8 @@ void CDeskTidyDlg::SaveConfig()
 	WritePrivateProfileString(_T("Settings"), _T("ZoomInHotKey"), szBuf, m_strIniPath);
 	wsprintf(szBuf, _T("%d"), m_nZoomOutHotKey);
 	WritePrivateProfileString(_T("Settings"), _T("ZoomOutHotKey"), szBuf, m_strIniPath);
+	wsprintf(szBuf, _T("%d"), m_nSearchHotKey);
+	WritePrivateProfileString(_T("Settings"), _T("SearchHotKey"), szBuf, m_strIniPath);
 }
 
 // ---------------------------------------------------------------------------

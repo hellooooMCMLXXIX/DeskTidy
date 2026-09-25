@@ -15,6 +15,7 @@
 #define ID_TRAY_EXIT					32772
 #define ID_TRAY_SHOW_WIDGETS			32773
 #define ID_TRAY_HIDE_WIDGETS			32774
+#define ID_TRAY_SEARCH					32775	// WorkBuddy: tray menu - open search popup
 
 // Main settings dialog controls
 #define IDC_LIST_WIDGETS				1000
@@ -45,6 +46,8 @@
 #define IDC_CHECK_TEXT_AUTO				1026	// WorkBuddy: name color auto-follow checkbox
 #define IDC_CHECK_ZORDER_MAINTAIN		1027	// WorkBuddy: z-order maintain switch checkbox
 #define IDC_CHECK_BOTTOM_CHILD			1028	// WorkBuddy: bottom-via-desktop-child switch checkbox
+#define IDC_EDIT_SEARCH_HOTKEY			1029	// WorkBuddy: search hotkey input (CHotKeyCtrl)
+#define IDC_CHECK_SEARCH_HOTKEY			1030	// WorkBuddy: search hotkey enable checkbox
 
 // Widget internal controls
 #define IDC_WIDGET_LIST					1020
@@ -55,9 +58,9 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 
 #define _APS_NEXT_RESOURCE_VALUE	130
-#define _APS_NEXT_CONTROL_VALUE		1029
+#define _APS_NEXT_CONTROL_VALUE		1031
 
 #define _APS_NEXT_SYMED_VALUE		102
-#define _APS_NEXT_COMMAND_VALUE		32775
+#define _APS_NEXT_COMMAND_VALUE		32776
 #endif
 #endif

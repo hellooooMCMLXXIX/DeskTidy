@@ -4046,6 +4046,9 @@ void CDeskTidyWidget::OnListRClick(NMHDR* pNMHDR, LRESULT* pResult)
     menu.AppendMenu(MF_SEPARATOR);
     menu.AppendMenu(MF_STRING, 1, _T("刷新列表"));
     menu.AppendMenu(MF_STRING, 2, _T("打开所在目录"));
+    // WorkBuddy: 搜索文件（窗口级操作，与选中项无关，永远可用）——
+    // 请求主对话框弹出全局搜索弹窗，搜索范围是全部小窗口的目录
+    menu.AppendMenu(MF_STRING, 26, _T("搜索文件..."));
     menu.AppendMenu(MF_SEPARATOR);
     menu.AppendMenu(MF_STRING, 3,
                     (m_nViewMode == 0) ? _T("切换为网格视图") : _T("切换为列表视图"));
@@ -4109,6 +4112,12 @@ void CDeskTidyWidget::OnListRClick(NMHDR* pNMHDR, LRESULT* pResult)
             ShellExecute(NULL, _T("open"), strDir, NULL, NULL, SW_SHOWNORMAL);
         break;
     }
+
+    case 26:
+        // 搜索文件：PostMessage 转达意图即可，弹窗的创建/激活都在主对话框侧
+        if (m_hNotify != NULL && ::IsWindow(m_hNotify))
+            ::PostMessage(m_hNotify, WM_WIDGET_SEARCH, 0, 0);
+        break;
 
     case 3:
         // 切换列表 / 网格视图，并通知主对话框保存配置

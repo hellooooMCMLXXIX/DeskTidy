@@ -15,6 +15,8 @@
 #include "DeskTidyWidget.h"
 #include <afxtempl.h>   // CArray：小窗口对象数组
 #include <afxcmn.h>     // CHotKeyCtrl：全局快捷键输入控件
+#include <regex>        // WorkBuddy: 搜索弹窗支持正则表达式匹配文件名
+#include <afxcoll.h>    // WorkBuddy: CMapStringToPtr——结果文件图标缓存
 
 // ---------------------------------------------------------------------------
 // WorkBuddy: 现代扁平界面 —— 悬停感知按钮
@@ -47,6 +49,7 @@ private:
 #define HOTKEY_ID_BOTTOM    2   // 置底快捷键：所有小窗口最底层
 #define HOTKEY_ID_ZOOMIN    3   // 缩放放大快捷键：所有小窗口放大一档
 #define HOTKEY_ID_ZOOMOUT   4   // 缩放缩小快捷键：所有小窗口缩小一档
+#define HOTKEY_ID_SEARCH    5   // WorkBuddy: 搜索快捷键：弹出全局搜索窗口
 
 // 置底维护定时器 ID 与防抖延时（毫秒）：
 // WinEvent 事件（前台窗口变化/窗口显示等）触发后，先重启本定时器，
@@ -68,6 +71,77 @@ private:
 // 检查并重建被销毁的小窗口，保证 Explorer 重启后小窗口自动恢复
 #define TIMER_ID_WIDGET_CHECK     2     // 小窗口存活巡检定时器
 #define WIDGET_CHECK_INTERVAL     3000  // 巡检间隔（毫秒）
+
+// ---------------------------------------------------------------------------
+// WorkBuddy: 全局搜索弹窗（"搜索"快捷键触发）
+// ---------------------------------------------------------------------------
+// 顶层置顶小窗：关键词输入框 + "搜索"按钮 + 结果列表。搜索范围 = 所有
+// 小窗口配置的目录（递归子目录），按文件名子串匹配（不区分大小写）；
+// 双击结果用系统默认程序打开。无资源模板，控件全部运行时创建（CAlphaDlg 同套路）
+#define SEARCH_MAX_RESULTS   500   // 结果条数上限（防止超大目录卡死 UI 线程）
+
+class CSearchPopup : public CWnd
+{
+public:
+	CSearchPopup() : m_bExpanded(FALSE), m_bBtnHover(FALSE), m_bEditFocus(FALSE),
+	                 m_nFound(-1), m_bTruncated(FALSE) {}
+	~CSearchPopup();                // 释放结果文件图标缓存
+	BOOL Create(CWnd* pOwner);      // 创建无边框窗口与三个子控件
+	void PrepareAndShow();          // 显示并聚焦输入框（保留上次关键词与结果）
+	void RunSearch();               // 执行搜索并填充结果列表
+
+	CStringArray m_arrDirs;         // 搜索范围：所有小窗口的目录（每次触发前同步）
+
+protected:
+	virtual BOOL PreTranslateMessage(MSG* pMsg);   // Enter = 搜索，Esc = 关闭
+	afx_msg void OnBtnSearch();
+	afx_msg void OnListDblClk();
+	afx_msg void OnPaint();                                 // 白底 + 底部统计行
+	afx_msg BOOL OnEraseBkgnd(CDC* pDC);
+	afx_msg void OnDrawItem(int nIDCtl, LPDRAWITEMSTRUCT lpDrawItemStruct); // 自绘放大镜按钮
+	afx_msg LRESULT OnBtnHover(WPARAM wParam, LPARAM lParam);   // CFlatBtn 悬停转发
+	afx_msg LRESULT OnNcHitTest(CPoint point);                  // 无标题栏：全窗可拖动
+	afx_msg void OnEditSetFocus();                              // 搜索条聚焦：描边变品牌蓝
+	afx_msg void OnEditKillFocus();                             // 失焦：描边恢复浅灰
+	DECLARE_MESSAGE_MAP()
+
+	// 递归搜索一个目录；返回 FALSE = 达到结果上限提前终止。
+	// pRe 非空 = 正则模式（不区分大小写）；为空则按 strPlainLower 普通子串匹配
+	BOOL SearchOneDir(const CString& strDir, const std::wregex* pRe,
+	                  const CString& strPlainLower, int& nFound);
+	// 文件名匹配：pRe 非空走正则，否则普通子串（不区分大小写）
+	static BOOL MatchName(const CString& strName, const std::wregex* pRe,
+	                      const CString& strPlainLower);
+
+	// 结果项绘制：左侧文件图标 + 右侧两行（第一行文件名大字、第二行路径小字）
+	void DrawSearchResult(LPDRAWITEMSTRUCT lpDIS);
+	// 取文件关联图标（按完整路径缓存；取不到缓存 NULL 防重复失败开销）
+	HICON GetItemIcon(LPCTSTR pszPath);
+
+	// 紧凑/展开两态尺寸：无搜索结果时窗口刚好包住输入框+按钮，
+	// 有结果时向下伸展露出结果列表与统计行（锚定左上角）
+	void SetSize(BOOL bExpanded);
+	// 按当前状态与客户区大小布置子控件
+	void DoLayout();
+	// 自绘"搜索"按钮：无文字，画一个放大镜图标（含悬停/按下态）
+	void DrawSearchButton(LPDRAWITEMSTRUCT lpDIS);
+	// 自绘胶囊搜索条容器：白色填充圆角描边，聚焦态品牌蓝、非焦点浅灰
+	//（输入框本身无边框，观感是"嵌在胶囊里的输入区"）
+	void DrawSearchBar(CDC* pDC);
+
+	CEdit     m_edit;       // 关键词输入框（大字体）
+	CFlatBtn  m_btn;        // "搜索"按钮（自绘放大镜；CFlatBtn 提供悬停转发）
+	CListBox  m_list;       // 结果列表（每项 = 完整路径，owner-draw 双行显示）
+	CFont     m_fontBig;    // 搜索框大字体（16pt Segoe UI，随 DPI 缩放）
+	CFont     m_fontName;   // 结果第一行：文件名（11pt 深灰）
+	CFont     m_fontPath;   // 结果第二行：路径（9pt 浅灰）
+	CMapStringToPtr m_mapIcons;  // 文件图标缓存（完整路径 -> HICON，析构时销毁）
+	BOOL      m_bExpanded;  // 当前是否展开（显示结果列表）
+	BOOL      m_bBtnHover;  // 搜索按钮悬停态（CFlatBtn 转发）
+	int       m_nFound;     // 最近一次搜索命中数（-1 = 尚未搜索）
+	BOOL      m_bTruncated; // 最近一次搜索是否被上限截断
+	BOOL      m_bEditFocus; // 输入框是否持有焦点（驱动搜索条描边颜色）
+};
 
 // CDeskTidyDlg 对话框
 class CDeskTidyDlg : public CDialogEx
@@ -99,11 +173,13 @@ protected:
 	afx_msg void OnDestroy();                               // 销毁：清理托盘图标与小窗口
 	afx_msg LRESULT OnTrayIcon(WPARAM wParam, LPARAM lParam);// 托盘回调消息
 	afx_msg LRESULT OnWidgetChanged(WPARAM wParam, LPARAM lParam); // 小窗口状态变更（拖动/缩放结束）
+	afx_msg LRESULT OnWidgetSearch(WPARAM wParam, LPARAM lParam);  // WorkBuddy: 小窗口菜单请求打开搜索弹窗
 	afx_msg LRESULT OnActivateExisting(WPARAM wParam, LPARAM lParam); // WorkBuddy: 单实例——第二个进程请求显示主界面
 	afx_msg void OnTrayShow();                              // 托盘菜单：显示主界面
 	afx_msg void OnTrayShowWidgets();                       // 托盘菜单：显示全部小窗口
 	afx_msg void OnTrayHideWidgets();                       // 托盘菜单：隐藏全部小窗口
 	afx_msg void OnTrayExit();                              // 托盘菜单：退出应用
+	afx_msg void OnTraySearch();                            // WorkBuddy: 托盘菜单：打开搜索弹窗
 	afx_msg void OnBnClickedAdd();                          // 添加小窗口（选择目录）
 	afx_msg void OnBnClickedDelete();                       // 删除选中的小窗口
 	afx_msg void OnBnClickedApply();                        // 应用按钮：把属性应用到选中窗口
@@ -190,6 +266,9 @@ private:
 	// 把所有小窗口统一放大/缩小一档缩放级别（nStep = 1 放大、-1 缩小）
 	// 并保存配置（快捷键触发，与置顶/置底快捷键一样对所有小窗口生效）
 	void ApplyAllWidgetZoom(int nStep);
+	// WorkBuddy: 显示/激活全局搜索弹窗（"搜索"快捷键触发），
+	// 触发前把所有小窗口的目录同步为弹窗的搜索范围
+	void ShowSearchPopup();
 
 	// ---- 置底维护（SetWinEventHook 事件驱动）----
 	// 注册 WinEvent 事件钩子：监听 EVENT_SYSTEM_FOREGROUND（前台窗口变化）、
@@ -282,14 +361,20 @@ private:
 	CHotKeyCtrl     m_ctlBottomHotKey;   // "置底"快捷键输入控件
 	CHotKeyCtrl     m_ctlZoomInHotKey;   // "缩放放大"快捷键输入控件
 	CHotKeyCtrl     m_ctlZoomOutHotKey;  // "缩放缩小"快捷键输入控件
+	CHotKeyCtrl     m_ctlSearchHotKey;   // WorkBuddy: "搜索"快捷键输入控件
 	BOOL            m_bTopHotKeyEnable;      // "置顶"快捷键是否启用（勾选"启用"复选框）
 	BOOL            m_bBottomHotKeyEnable;   // "置底"快捷键是否启用
 	BOOL            m_bZoomInHotKeyEnable;   // "缩放放大"快捷键是否启用
 	BOOL            m_bZoomOutHotKeyEnable;  // "缩放缩小"快捷键是否启用
+	BOOL            m_bSearchHotKeyEnable;   // WorkBuddy: "搜索"快捷键是否启用
 	int             m_nTopHotKey;           // "置顶"快捷键值（0 = 未指定）
 	int             m_nBottomHotKey;        // "置底"快捷键值（0 = 未指定）
 	int             m_nZoomInHotKey;        // "缩放放大"快捷键值（0 = 未指定）
 	int             m_nZoomOutHotKey;       // "缩放缩小"快捷键值（0 = 未指定）
+	int             m_nSearchHotKey;        // WorkBuddy: "搜索"快捷键值（0 = 未指定）
+
+	// WorkBuddy: 全局搜索弹窗（按值持有，随对话框构造/析构，生命周期安全）
+	CSearchPopup    m_searchPopup;
 
 	// 置底维护（SetWinEventHook 事件钩子句柄，NULL = 未注册）
 	HWINEVENTHOOK   m_hHookForeground;      // 前台窗口变化事件钩子

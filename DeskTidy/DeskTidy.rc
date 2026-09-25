@@ -91,7 +91,7 @@ BEGIN
     DEFPUSHBUTTON   "确定",IDOK,113,41,50,14,WS_GROUP
 END
 
-IDD_DESKTIDY_DIALOG DIALOGEX 0, 0, 408, 483
+IDD_DESKTIDY_DIALOG DIALOGEX 0, 0, 408, 503
 STYLE DS_SETFONT | WS_POPUP | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU
 EXSTYLE WS_EX_APPWINDOW
 CAPTION "桌面归置设置"
@@ -137,8 +137,11 @@ BEGIN
     LTEXT           "缩放缩小:",IDC_STATIC,20,431,80,12
     CONTROL         "",IDC_EDIT_ZOOMOUT_HOTKEY,"msctls_hotkey32",WS_TABSTOP,104,429,110,14
     CONTROL         "启用",IDC_CHECK_ZOOMOUT_HOTKEY,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,228,431,50,12
-    LTEXT           "勾选【启用】后，点击输入框并按下组合键（需包含 Ctrl、Alt 或 Shift）即可指定全局快捷键，留空为不指定。",IDC_STATIC,20,446,368,12
-    LTEXT           "快捷键对所有小窗口生效；与系统或其他程序冲突的组合将注册失败并给出提示。",IDC_STATIC,20,461,352,12
+    LTEXT           "搜索:",IDC_STATIC,20,451,80,12
+    CONTROL         "",IDC_EDIT_SEARCH_HOTKEY,"msctls_hotkey32",WS_TABSTOP,104,449,110,14
+    CONTROL         "启用",IDC_CHECK_SEARCH_HOTKEY,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,228,451,50,12
+    LTEXT           "勾选【启用】后，点击输入框并按下组合键（需包含 Ctrl、Alt 或 Shift）即可指定全局快捷键，留空为不指定。",IDC_STATIC,20,466,368,12
+    LTEXT           "快捷键对所有小窗口生效；与系统或其他程序冲突的组合将注册失败并给出提示。",IDC_STATIC,20,481,352,12
 END
 
 
@@ -152,6 +155,7 @@ BEGIN
     POPUP "托盘菜单"
     BEGIN
         MENUITEM "参数设置",                        ID_TRAY_SHOW
+        MENUITEM "搜索文件",                        ID_TRAY_SEARCH
         MENUITEM SEPARATOR
         MENUITEM "显示小窗口",                       ID_TRAY_SHOW_WIDGETS
         MENUITEM "隐藏小窗口",                       ID_TRAY_HIDE_WIDGETS
